@@ -62,7 +62,7 @@ html,body{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;us
 <body>
 <main>
 <h1>Glitch Snake</h1>
-<div id="pilot">JADE SERPENT PILOT v5 · visual rebuild test · not the live game</div>
+<div id="pilot">JADE SERPENT PILOT v6 · visual rebuild test · not the live game</div>
 <div class="score"><span>Score: <span id="score">0</span></span><span>Best: <span id="best">0</span></span><span>Today: <span id="todayBest">0</span></span><span id="shieldState"></span></div>
 <canvas id="game" width="400" height="400" aria-label="Glitch Snake game board"></canvas>
 <div class="console">
@@ -95,6 +95,22 @@ const N = 20, CELL = 20;
 var boardImg = new Image(), boardReady = false;
 boardImg.onload = function () { boardReady = true; };
 boardImg.src = 'board-plate.webp';
+// The real serpent: an emerald scale skin (pattern-filled body) and a
+// photographic head sprite. Until both load, the drawn segments remain.
+var scaleImg = new Image(), headImg = new Image(), scaleReady = false, headReady = false;
+scaleImg.onload = function () { scaleReady = true; };
+headImg.onload = function () { headReady = true; };
+scaleImg.src = 'scale-body.webp';
+headImg.src = 'head-sprite.webp';
+var scalePattern = null;
+function getScalePattern() {
+  if (!scalePattern) {
+    var pc = document.createElement('canvas'); pc.width = 52; pc.height = 52;
+    pc.getContext('2d').drawImage(scaleImg, 0, 0, 52, 52);
+    scalePattern = ctx.createPattern(pc, 'repeat');
+  }
+  return scalePattern;
+}
 // Gentle rain over the wet stone: streaks + expanding ripple rings.
 // Skipped entirely for reduced-motion players.
 var reducedMotion = false;
@@ -340,6 +356,67 @@ function drawOrb(cx, cy, r, gold) {
   ctx.beginPath(); ctx.arc(cx, cy, rr2, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
+// The real serpent: a continuous tapered tube, tail to neck, drawn in
+// passes per link — contact shadow, the scale skin (flowing slowly so
+// the body seems to slide inside its skin), a sheen tint in the theme
+// colour, cylinder shading across the tube, and a specular streak.
+// The photographic head rides on top, rotated to the travel direction.
+// Links that jump more than one cell are wall wraps and are not drawn.
+function drawSerpent(t) {
+  var C = snake.map(s => ({ x: s.x * CELL + CELL / 2, y: s.y * CELL + CELL / 2 }));
+  var pat = getScalePattern();
+  ctx.lineCap = 'round';
+  for (var i = C.length - 2; i >= 0; i--) {
+    var a = C[i + 1], b = C[i];
+    var dcx = Math.abs(snake[i + 1].x - snake[i].x), dcy = Math.abs(snake[i + 1].y - snake[i].y);
+    if (dcx > 1 || dcy > 1) continue;
+    var frac = C.length > 2 ? (C.length - 2 - i) / (C.length - 2) : 1;
+    var w = 11 + 8 * frac;
+    var ux = b.x - a.x, uy = b.y - a.y;
+    var ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
+    ctx.strokeStyle = 'rgba(0,0,0,.30)'; ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y + 2.5); ctx.lineTo(b.x, b.y + 2.5); ctx.stroke();
+    var fl = (tick * 1.1 + i * 9) % 52;
+    ctx.save();
+    ctx.translate(-ux * fl * 0.5, -uy * fl * 0.5);
+    ctx.strokeStyle = pat; ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.restore();
+    ctx.save(); ctx.globalAlpha = 0.15;
+    ctx.strokeStyle = t.a; ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.restore();
+    var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    var gx = -uy, gy = ux;
+    var gr = ctx.createLinearGradient(mx + gx * w / 2, my + gy * w / 2, mx - gx * w / 2, my - gy * w / 2);
+    gr.addColorStop(0, 'rgba(255,255,255,.22)');
+    gr.addColorStop(0.45, 'rgba(255,255,255,0)');
+    gr.addColorStop(1, 'rgba(0,0,0,.28)');
+    ctx.strokeStyle = gr; ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = w * 0.32;
+    ctx.beginPath(); ctx.moveTo(a.x - 1.6, a.y - 2.2); ctx.lineTo(b.x - 1.6, b.y - 2.2); ctx.stroke();
+  }
+  // Photographic head, skull centred on the head cell, neck overlapping
+  // the first link so the join disappears.
+  var h = C[0];
+  var hw = CELL * 1.7, hh = hw * headImg.height / headImg.width;
+  var ang = Math.atan2(dir.y, dir.x) + Math.PI / 2;
+  ctx.save();
+  ctx.translate(h.x, h.y); ctx.rotate(ang);
+  ctx.drawImage(headImg, -hw / 2, -hh * 0.42, hw, hh);
+  ctx.restore();
+  if (tick % 90 < 12) {
+    var cx = h.x, cy = h.y;
+    var fx = dir.x, fy = dir.y, px = -fy, py = fx;
+    var tx = cx + fx * 24, ty = cy + fy * 24;
+    ctx.strokeStyle = '#ff5f7a'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(cx + fx * 17, cy + fy * 17); ctx.lineTo(tx, ty);
+    ctx.moveTo(tx, ty); ctx.lineTo(tx + (fx * 3 + px * 2), ty + (fy * 3 + py * 2));
+    ctx.moveTo(tx, ty); ctx.lineTo(tx + (fx * 3 - px * 2), ty + (fy * 3 - py * 2));
+    ctx.stroke(); ctx.lineWidth = 1;
+  }
+}
 // One serpent segment: rounded, vertically shaded (lit top, deep belly),
 // speckled like scales, with a glossy ridge. The head is the brightest
 // segment and carries eyes oriented to travel plus a flicking tongue.
@@ -437,15 +514,18 @@ function draw() {
     particles.forEach(p => {
       ctx.fillStyle = p.color;
       const size = Math.max(2, CELL - 2 - explodeFrame * 0.5);
-      ctx.fillRect(p.x - size/2, p.y - size/2, size, size);
+      ctx.beginPath(); ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2); ctx.fill();
     });
   } else {
-    snake.forEach((s, i) => drawSegment(s, i, t));
+    if (headReady && scaleReady) drawSerpent(t); else snake.forEach((s, i) => drawSegment(s, i, t));
   }
   // Bite particles, in the bitten food's colour.
   biteParticles.forEach(p => {
+    ctx.save();
+    ctx.shadowColor = p.color; ctx.shadowBlur = 6;
     ctx.fillStyle = p.color;
-    ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   });
   // Rain over the wet stone: falling streaks and ripple rings.
   if (!reducedMotion) {
