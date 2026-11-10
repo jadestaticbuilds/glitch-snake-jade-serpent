@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+/* ?view=desktop preview: force desktop theme on narrow screens */
+try {
+  if (new URLSearchParams(location.search).get("view") === "desktop") {
+    document.querySelector('meta[name="viewport"]').setAttribute("content", "width=1280");
+  }
+} catch (e) {}
+</script>
+<title>Glitch Snake · Jade Serpent pilot</title>
+<meta name="description" content="A small browser Snake game with glitch bursts. No signup, no upload, high score saved on your device only.">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#03130b;color:#eafcff;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:4px 16px calc(4px + env(safe-area-inset-bottom));padding-bottom:34px;padding-bottom:max(34px, calc(4px + env(safe-area-inset-bottom)));text-align:center;height:100vh;height:100dvh;overflow:hidden;display:flex;justify-content:center}
+main{width:100%;max-width:480px;height:100%;display:flex;flex-direction:column;align-items:center}
+h1{margin:0;font-size:26px;text-shadow:0 0 14px #2fe8a8}
+#pilot{color:#ff2e88;font-weight:700;letter-spacing:1px;margin:2px 0;font-size:13px}
+p.sub{color:#9fb8c8;margin:2px 0 8px}
+.score{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 24px;margin:0 0 4px;font-weight:700}
+canvas{display:block;width:min(92vw,440px,calc(100dvh - 400px));height:auto;aspect-ratio:1/1;margin:0 auto;background:#04150d;border:2px solid #1fbf8a;border-radius:12px;box-shadow:0 0 24px rgba(31,191,138,.30);touch-action:none;flex-shrink:1}
+button{background:#2fe8a8;color:#032117;border:0;border-radius:999px;padding:8px 16px;font-weight:700;font-size:16px;margin:6px 6px 0;cursor:pointer}
+button.secondary{background:transparent;color:#eafcff;border:1px solid #1fbf8a}
+.pad{display:grid;grid-template-columns:repeat(3,96px);justify-content:center;gap:12px;margin:6px auto 0;flex-shrink:0}
+.pad button{margin:0;padding:24px 0;font-size:24px;border-radius:16px}
+.pad .empty{visibility:hidden}
+.note{color:#9fb8c8;font-size:13px;margin:4px 0 0}
+@media (max-height:750px){.foot{display:none}}
+/* --- Desktop (Tier 5 desktop-readiness): everything in this block only
+   applies at 1024px and up. Phone CSS above is untouched. Arcade pattern:
+   centered, larger play area, HUD scaled sensibly. */
+@media (min-width:1024px){
+  main{max-width:780px}
+  h1{font-size:32px}
+  .score{font-size:18px;gap:8px 32px}
+  canvas{width:min(62vw,560px,calc(100dvh - 380px))}
+  .pad{grid-template-columns:repeat(3,112px);gap:14px}
+  .pad button{padding:28px 0}
+  button{font-size:17px;padding:10px 20px}
+  .note{font-size:14px}
+}
+@media (min-width:1440px){
+  main{max-width:900px}
+  canvas{width:min(54vw,640px,calc(100dvh - 380px))}
+}
+a{color:#2fe8a8}
+</style>
+  <script data-goatcounter="https://georgestriderbuilds.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<style>
+/* prevent text selection popup on mobile tap */
+html,body{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;-webkit-touch-callout:none;}
+</style>
+</head>
+<body>
+<main>
+<h1>Glitch Snake</h1>
+<div id="pilot">JADE SERPENT PILOT v1 · visual rebuild test · not the live game</div>
+<div class="score"><span>Score: <span id="score">0</span></span><span>Best: <span id="best">0</span></span><span>Today: <span id="todayBest">0</span></span><span id="shieldState"></span></div>
+<canvas id="game" width="400" height="400" aria-label="Glitch Snake game board"></canvas>
+<div>
+<button id="startBtn">Start</button>
+<button id="dailyBtn" class="secondary">Today's board</button>
+<button id="pauseBtn" class="secondary">Pause</button>
+<button id="soundBtn" class="secondary">Sound: On</button>
+</div>
+<div class="pad" aria-label="Direction pad">
+<span class="empty"></span><button data-dir="up" aria-label="Up">▲</button><span class="empty"></span>
+<button data-dir="left" aria-label="Left">◀</button><button data-dir="down" aria-label="Down">▼</button><button data-dir="right" aria-label="Right">▶</button>
+</div>
+<p class="note" id="msg">Press Start. Every 5th bite is a glitch orb, worth 5 points and a bigger burst.</p>
+<p class="note" id="history"></p>
+<p class="note foot">A Jade Static Builds collab, built with Muse. No signup, no upload.</p>
+</main>
+<script>
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+// DPR-sharp rendering: the backing store scales with device pixels while
+// all drawing code stays in 400x400 logical coordinates.
+const DPR = Math.min(window.devicePixelRatio || 1, 3);
+cv.width = 400 * DPR;
+cv.height = 400 * DPR;
+const N = 20, CELL = 20;
+// Jade Serpent board plate (wet stone). Falls back to the theme bg fill
+// until it loads, and forever if it fails.
+var boardImg = new Image(), boardReady = false;
+boardImg.onload = function () { boardReady = true; };
+boardImg.src = 'board-plate.webp';
+// Gentle rain over the wet stone: streaks + expanding ripple rings.
+// Skipped entirely for reduced-motion players.
+var reducedMotion = false;
+try { reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+var tick = 0, ripples = [];
+var rainDrops = [];
+for (var ri = 0; ri < 42; ri++) rainDrops.push({ x: Math.random() * 400, y: Math.random() * 400, v: 5 + Math.random() * 5, len: 7 + Math.random() * 8 });
+let snake, dir, dirQueue, food, score, eaten, glitch, running, paused;
+let frenzy = false, bonusFoods = [], frenzyTick = 0;
+let exploding = false, particles = [], explodeTimer = null, explodeFrame = 0;
+let themeIndex = 0;
+// JADE SERPENT: the world is fixed (wet stone plate, amber food); the
+// serpent's sheen rotates through four emerald-family arrangements on
+// every bite, the same rotation mechanic as the original palettes.
+const themes = [
+  {bg:'#04150d', grid:'rgba(190,255,220,.07)', a:'#2fd574', b:'#1aa862', food:'#ffb340', orb:'#ffe259', accent:'#2fe8a8'},
+  {bg:'#03130f', grid:'rgba(190,255,220,.07)', a:'#2fd5b0', b:'#17a88a', food:'#ffb340', orb:'#ffe259', accent:'#2fd5b0'},
+  {bg:'#051505', grid:'rgba(220,255,200,.07)', a:'#7ed957', b:'#4aa832', food:'#ffb340', orb:'#ffe259', accent:'#7ed957'},
+  {bg:'#101303', grid:'rgba(255,240,190,.08)', a:'#d8c95a', b:'#a89a35', food:'#ffb340', orb:'#7df9ff', accent:'#ffe259'}
+];
+let best = 0;
+try { best = parseInt(localStorage.getItem('gsj-best') || '0', 10) || 0; } catch (e) {}
+document.getElementById('best').textContent = best;
+
+// --- Daily best: one best score per local day (gs-daily-best + gs-daily-date).
+// A stale date resets the daily best in memory; it is persisted on game over.
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+let dailyBest = 0, dailyDate = todayStr();
+try {
+  const storedDate = localStorage.getItem('gsj-daily-date');
+  const storedBest = parseInt(localStorage.getItem('gsj-daily-best') || '0', 10) || 0;
+  if (storedDate === dailyDate) {
+    dailyBest = storedBest;
+  } else {
+    dailyBest = 0;
+    dailyDate = todayStr();
+  }
+} catch (e) { dailyBest = 0; dailyDate = todayStr(); }
+function renderTodayBest() {
+  document.getElementById('todayBest').textContent = dailyBest;
+}
+function updateDailyBest() {
+  if (dailyDate !== todayStr()) {
+    dailyBest = 0;
+    dailyDate = todayStr();
+  }
+  if (score > dailyBest) {
+    dailyBest = score;
+    try {
+      localStorage.setItem('gsj-daily-best', String(dailyBest));
+      localStorage.setItem('gsj-daily-date', dailyDate);
+    } catch (e) {}
+  }
+  renderTodayBest();
+}
+renderTodayBest();
+
+// --- Sound: Web Audio only, no files, never required to play ---
+let soundOn = true, audioCtx = null;
+try { soundOn = localStorage.getItem('gsj-sound') !== 'off'; } catch (e) {}
+document.getElementById('soundBtn').textContent = soundOn ? 'Sound: On' : 'Sound: Off';
+function playBlip(freq) {
+  if (!soundOn) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = 'triangle'; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.09);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.09);
+  } catch (e) {}
+}
+
+// --- Run history (local only) ---
+let gamesPlayed = 0, runHistory = [];
+try {
+  gamesPlayed = parseInt(localStorage.getItem('gsj-games') || '0', 10) || 0;
+  runHistory = JSON.parse(localStorage.getItem('gsj-history') || '[]');
+  if (!Array.isArray(runHistory)) runHistory = [];
+} catch (e) { gamesPlayed = 0; runHistory = []; }
+function renderHistory() {
+  const el = document.getElementById('history');
+  if (!runHistory.length) {
+    el.textContent = 'No runs yet. Your last 5 runs will appear here.';
+    return;
+  }
+  const runs = runHistory.map(r => r.score + '/' + r.length).join(', ');
+  el.textContent = 'Played: ' + gamesPlayed + '  •  Last runs (score/length): ' + runs;
+}
+function recordRun() {
+  runHistory.push({ score: score, length: snake.length, date: todayStr() });
+  runHistory = runHistory.slice(-5);
+  gamesPlayed++;
+  try {
+    localStorage.setItem('gsj-history', JSON.stringify(runHistory));
+    localStorage.setItem('gsj-games', String(gamesPlayed));
+  } catch (e) {}
+  renderHistory();
+}
+
+// --- Daily seed: the local date picks the food sequence, no server ---
+let dailyMode = false, seededRng = null;
+function seededRandom(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function todaySeed() {
+  const d = new Date();
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+function gameRandom() { return dailyMode && seededRng ? seededRng() : Math.random(); }
+function isOccupied(x, y) {
+  return snake.some(s => s.x === x && s.y === y) ||
+    bonusFoods.some(b => b.x === x && b.y === y) ||
+    (food && food.x === x && food.y === y) ||
+    (shieldTile && shieldTile.x === x && shieldTile.y === y);
+}
+function randomEmptyCell() {
+  for (let tries = 0; tries < 400; tries++) {
+    const c = { x: Math.floor(gameRandom() * N), y: Math.floor(gameRandom() * N) };
+    if (!isOccupied(c.x, c.y)) return c;
+  }
+  return null;
+}
+
+// --- Shield power-up: blue diamond, shape-coded, not colour alone ---
+// Spawn rule: after score 20, on every 15th normal (non-orb, non-frenzy)
+// bite, if no shield tile is on the board and no shield is active.
+// Shield bites do NOT touch the 5-bite gold orb cadence (eaten is untouched),
+// and shield tiles never spawn during frenzy.
+let shieldTile = null, shieldUntil = 0, shieldBites = 0;
+function shieldActive() { return shieldUntil > 0 && Date.now() < shieldUntil; }
+function placeShield() {
+  const c = randomEmptyCell();
+  if (c) shieldTile = c;
+}
+function updateShieldState() {
+  document.getElementById('shieldState').textContent = shieldActive() ? '🛡 Shield' : '';
+}
+
+// --- Bite juice: hit-stop, particles, pitch rising with combo ---
+let combo = 0, biteParticles = [], biteTimer = null;
+function startBiteJuice(color, cellX, cellY) {
+  biteParticles = [];
+  for (let i = 0; i < 8; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 3;
+    biteParticles.push({ x: cellX * CELL + CELL / 2, y: cellY * CELL + CELL / 2, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, color: color, life: 6 });
+  }
+  clearInterval(biteTimer);
+  biteTimer = setInterval(() => {
+    biteParticles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life--; });
+    biteParticles = biteParticles.filter(p => p.life > 0);
+    draw();
+    if (!biteParticles.length) clearInterval(biteTimer);
+  }, 40);
+}
+let hitStopMs = 0;
+// --- Delta-time game loop: ticks advance on accumulated real time, so the
+// snake moves at the same speed on 60Hz, 90Hz and 120Hz screens. Delta is
+// clamped at 250ms so a backgrounded tab never fast-forwards on return.
+// Bites set a 60ms hit-stop, matching the old restartTimerAfterHitStop feel.
+let lastFrame = 0, accMs = 0;
+function tickInterval() { return Math.max(70, 150 - score * 3); }
+function frame(t) {
+  if (running && !paused && !exploding) {
+    if (!lastFrame) lastFrame = t;
+    let dt = t - lastFrame;
+    lastFrame = t;
+    if (dt > 250) dt = 250;
+    if (hitStopMs > 0) {
+      hitStopMs -= dt;
+    } else {
+      accMs += dt;
+      const iv = tickInterval();
+      let guard = 0;
+      while (accMs >= iv && guard < 8) {
+        step();
+        accMs -= iv;
+        guard++;
+        if (!running || paused || exploding) break;
+      }
+      if (guard >= 8) accMs = 0;
+    }
+  } else {
+    lastFrame = 0;
+    accMs = 0;
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+function placeFood() {
+  const c = randomEmptyCell();
+  return c || { x: 0, y: 0 };
+}
+function placeBonusFoods() {
+  const out = [];
+  for (let tries = 0; tries < 400 && out.length < 3; tries++) {
+    const c = { x: Math.floor(gameRandom() * N), y: Math.floor(gameRandom() * N) };
+    if (snake.some(s => s.x === c.x && s.y === c.y)) continue;
+    if (out.some(b => b.x === c.x && b.y === c.y)) continue;
+    if (shieldTile && shieldTile.x === c.x && shieldTile.y === c.y) continue;
+    out.push(c);
+  }
+  return out;
+}
+function reset() {
+  snake = [{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+  dir = {x:1,y:0}; dirQueue = [];
+  score = 0; eaten = 0; glitch = 0; paused = false; themeIndex = 0;
+  frenzy = false; bonusFoods = []; frenzyTick = 0; exploding = false;
+  shieldTile = null; shieldUntil = 0; shieldBites = 0; combo = 0;
+  biteParticles = []; clearInterval(biteTimer);
+  food = placeFood();
+  document.getElementById('score').textContent = '0';
+  updateShieldState();
+  document.getElementById('msg').textContent = 'Press Start. Walls wrap around, and every bite shifts its sheen. Every 5th bite is a gold glitch orb, worth 5 points, and it starts frenzy mode with 3 gold orbs to eat.';
+  draw();
+}
+// A glowing orb: hot core, saturated mid, deep edge, soft halo. Gold
+// orbs (every 5th bite, frenzy) burn brighter and pulse larger.
+function drawOrb(cx, cy, r, gold) {
+  var pulse = 1 + 0.09 * Math.sin(tick * 0.16);
+  var rr2 = r * pulse;
+  ctx.save();
+  ctx.shadowColor = gold ? '#ffe259' : '#ffb340'; ctx.shadowBlur = gold ? 20 : 14;
+  var g = ctx.createRadialGradient(cx - rr2 * 0.3, cy - rr2 * 0.3, rr2 * 0.15, cx, cy, rr2);
+  g.addColorStop(0, '#fff8dc');
+  g.addColorStop(0.45, gold ? '#ffe259' : '#ffb340');
+  g.addColorStop(1, gold ? '#c9a227' : '#c77400');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, rr2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+// One serpent segment: rounded, vertically shaded (lit top, deep belly),
+// speckled like scales, with a glossy ridge. The head is the brightest
+// segment and carries eyes oriented to travel plus a flicking tongue.
+function rrPath(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawSegment(s, i, t) {
+  var x = s.x * CELL, y = s.y * CELL;
+  var head = i === 0;
+  if (head) { ctx.save(); ctx.shadowColor = 'rgba(160,255,205,.9)'; ctx.shadowBlur = 12; }
+  ctx.fillStyle = head ? '#63f2a4' : (i % 2 ? t.a : t.b);
+  rrPath(x - 0.5, y - 0.5, CELL + 1, CELL + 1, 7); ctx.fill();
+  if (head) ctx.restore();
+  var g = ctx.createLinearGradient(x, y, x, y + CELL);
+  g.addColorStop(0, 'rgba(255,255,255,.34)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(0,0,0,.30)');
+  ctx.fillStyle = g;
+  rrPath(x - 0.5, y - 0.5, CELL + 1, CELL + 1, 7); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,.18)';
+  var o1 = (i * 7) % 11, o2 = (i * 13) % 9;
+  ctx.fillRect(x + 3 + o1, y + 5 + o2, 2, 2);
+  ctx.fillRect(x + 12 - o2, y + 11 - o1 * 0.5, 2, 2);
+  ctx.fillStyle = 'rgba(255,255,255,.30)';
+  ctx.beginPath(); ctx.ellipse(x + CELL / 2, y + 5, 5, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+  if (head) {
+    var cx = x + CELL / 2, cy = y + CELL / 2;
+    var fx = dir.x, fy = dir.y, px = -fy, py = fx;
+    [-1, 1].forEach(sd => {
+      var ex = cx + fx * 3.5 + px * 4.4 * sd, ey = cy + fy * 3.5 + py * 4.4 * sd;
+      ctx.fillStyle = '#eafff3';
+      ctx.beginPath(); ctx.arc(ex, ey, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#06231a';
+      ctx.beginPath(); ctx.arc(ex + fx * 0.9, ey + fy * 0.9, 1.3, 0, Math.PI * 2); ctx.fill();
+    });
+    if (tick % 90 < 12) {
+      var tx = cx + fx * 11, ty = cy + fy * 11;
+      ctx.strokeStyle = '#ff5f7a'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(cx + fx * 8, cy + fy * 8); ctx.lineTo(tx, ty);
+      ctx.moveTo(tx, ty); ctx.lineTo(tx + (fx * 3 + px * 2), ty + (fy * 3 + py * 2));
+      ctx.moveTo(tx, ty); ctx.lineTo(tx + (fx * 3 - px * 2), ty + (fy * 3 - py * 2));
+      ctx.stroke(); ctx.lineWidth = 1;
+    }
+  }
+}
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // Frenzy mode: the background cycles through all four colour themes
+  // on every move, instead of changing only on a bite.
+  if (frenzy) themeIndex = frenzyTick % themes.length;
+  const t = themes[themeIndex];
+  cv.style.borderColor = t.accent;
+  if (boardReady) ctx.drawImage(boardImg, 0, 0, 400, 400);
+  else { ctx.fillStyle = t.bg; ctx.fillRect(0, 0, 400, 400); }
+  ctx.strokeStyle = t.grid;
+  for (let i = 1; i < N; i++) {
+    ctx.beginPath(); ctx.moveTo(i*CELL, 0); ctx.lineTo(i*CELL, 400); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i*CELL); ctx.lineTo(400, i*CELL); ctx.stroke();
+  }
+  // Food: theme food colour normally, theme orb colour for a glitch orb.
+  // In frenzy, the single food is replaced by 3 gold bonus squares.
+  if (frenzy) {
+    bonusFoods.forEach(b => drawOrb(b.x*CELL + CELL/2, b.y*CELL + CELL/2, 7.5, true));
+  } else if (food) {
+    const orb = (eaten + 1) % 5 === 0;
+    drawOrb(food.x*CELL + CELL/2, food.y*CELL + CELL/2, orb ? 8.5 : 6.5, orb);
+  }
+  // Shield tile: a blue diamond (shape-coded, not colour alone), drawn
+  // only outside frenzy. While active, the board edge glows gold.
+  if (!frenzy && shieldTile) {
+    const cx = shieldTile.x * CELL + CELL / 2, cy = shieldTile.y * CELL + CELL / 2;
+    ctx.fillStyle = '#38b6ff';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 8); ctx.lineTo(cx + 8, cy); ctx.lineTo(cx, cy + 8); ctx.lineTo(cx - 8, cy);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.38)';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 4.5); ctx.lineTo(cx + 4.5, cy); ctx.lineTo(cx, cy + 4.5); ctx.lineTo(cx - 4.5, cy);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1;
+  }
+  if (shieldActive()) {
+    ctx.strokeStyle = '#ffe259'; ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, 396, 396); ctx.lineWidth = 1;
+  }
+  // Snake, head brightest, body alternating the theme's two colours.
+  // During the death explosion the snake is replaced by flying particles.
+  if (exploding) {
+    particles.forEach(p => {
+      ctx.fillStyle = p.color;
+      const size = Math.max(2, CELL - 2 - explodeFrame * 0.5);
+      ctx.fillRect(p.x - size/2, p.y - size/2, size, size);
+    });
+  } else {
+    snake.forEach((s, i) => drawSegment(s, i, t));
+  }
+  // Bite particles, in the bitten food's colour.
+  biteParticles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+  });
+  // Rain over the wet stone: falling streaks and ripple rings.
+  if (!reducedMotion) {
+    tick++;
+    ctx.strokeStyle = 'rgba(200,255,230,.13)'; ctx.lineWidth = 1;
+    rainDrops.forEach(d => {
+      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 2, d.y + d.len); ctx.stroke();
+      d.y += d.v; if (d.y > 400) { d.y = -12; d.x = Math.random() * 400; }
+    });
+    if (tick % 50 === 0 && ripples.length < 3) ripples.push({ x: 20 + Math.random() * 360, y: 20 + Math.random() * 360, r: 2 });
+    ripples = ripples.filter(rp => rp.r < 26);
+    ripples.forEach(rp => {
+      ctx.strokeStyle = 'rgba(190,255,220,' + (0.20 * (1 - rp.r / 26)).toFixed(3) + ')';
+      ctx.beginPath(); ctx.ellipse(rp.x, rp.y, rp.r, rp.r * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
+      rp.r += 0.7;
+    });
+  }
+  // Glitch burst: shift a few horizontal slices for a few frames after eating.
+  // The source rect is in device pixels (DPR-scaled backing store).
+  if (glitch > 0) {
+    for (let k = 0; k < 5; k++) {
+      const y = Math.floor(Math.random() * N) * CELL;
+      const dx = (Math.random() < .5 ? -1 : 1) * (4 + Math.floor(Math.random() * 14));
+      ctx.drawImage(cv, 0, y * DPR, 400 * DPR, CELL * DPR, dx, y, 400, CELL);
+    }
+    glitch--;
+  }
+  if (!running && !exploding) {
+    ctx.fillStyle = 'rgba(3,15,9,.72)'; ctx.fillRect(0, 0, 400, 400);
+    ctx.fillStyle = '#eafcff'; ctx.font = '700 24px system-ui'; ctx.textAlign = 'center';
+    if (paused) {
+      ctx.fillText('Paused', 200, 180);
+      ctx.font = '16px system-ui';
+      ctx.fillText('Tap the board or Resume to keep glitching.', 200, 214);
+    } else if (score > 0) {
+      ctx.fillText('Game over. Score ' + score, 200, 168);
+      ctx.font = '16px system-ui';
+      ctx.fillText("Today's best: " + dailyBest + '   |   All-time: ' + best, 200, 200);
+      ctx.fillText('The grid glitched you out.', 200, 230);
+      ctx.fillText(dailyMode ? "Today's board. Press Start to play again." : 'Press Start to play again.', 200, 258);
+    } else {
+      ctx.fillText('Jade Serpent', 200, 168);
+      ctx.font = '16px system-ui';
+      ctx.fillText('Eat. Glitch. Repeat.', 200, 200);
+      ctx.fillText("Today's best: " + dailyBest, 200, 230);
+      ctx.fillText(dailyMode ? "Today's board. Press Start to play again." : 'Press Start to play again.', 200, 258);
+    }
+  }
+}
+function explode() {
+  running = false;
+  exploding = true; explodeFrame = 0;
+  playBlip(110);
+  const t = themes[themeIndex];
+  particles = snake.map((s, i) => ({
+    x: s.x*CELL + CELL/2, y: s.y*CELL + CELL/2,
+    vx: (Math.random() - 0.5) * 7, vy: (Math.random() - 0.5) * 7,
+    color: i === 0 ? '#ffffff' : (i % 2 ? t.a : t.b)
+  }));
+  document.getElementById('msg').textContent = 'Boom!';
+  clearInterval(explodeTimer);
+  explodeTimer = setInterval(() => {
+    explodeFrame++;
+    particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.15; });
+    glitch = 5;
+    draw();
+    if (explodeFrame >= 28) {
+      clearInterval(explodeTimer);
+      exploding = false; running = false;
+      shieldTile = null; shieldUntil = 0; updateShieldState();
+      recordRun();
+      if (score > best) {
+        best = score;
+        try { localStorage.setItem('gsj-best', String(best)); } catch (e) {}
+        document.getElementById('best').textContent = best;
+      }
+      updateDailyBest();
+      document.getElementById('msg').textContent = 'Game over. Press Start to try again.';
+      jsbFunRate('glitch-snake-jade-serpent', document.getElementById('msg'));
+      draw();
+    }
+  }, 40);
+}
+function step() {
+  if (!running || paused || exploding) return;
+  if (frenzy) frenzyTick++;
+  if (shieldUntil > 0 && Date.now() >= shieldUntil) { shieldUntil = 0; updateShieldState(); }
+  if (dirQueue.length) dir = dirQueue.shift();
+  // Walls wrap: going off one side appears on the other side.
+  const head = {
+    x: (snake[0].x + dir.x + N) % N,
+    y: (snake[0].y + dir.y + N) % N
+  };
+  const shieldEat = !frenzy && shieldTile && head.x === shieldTile.x && head.y === shieldTile.y;
+  const bonusIndex = frenzy ? bonusFoods.findIndex(b => b.x === head.x && b.y === head.y) : -1;
+  const willEat = !frenzy && food && head.x === food.x && head.y === food.y;
+  const willGrow = willEat || bonusIndex >= 0;
+  // The tail cell frees up on a non-eating move, so it is not a collision then.
+  // A live shield lets the snake pass through its own tail briefly.
+  const body = willGrow ? snake : snake.slice(0, -1);
+  if (body.some(s => s.x === head.x && s.y === head.y) && !shieldActive()) {
+    explode(); return;
+  }
+  snake.unshift(head);
+  if (shieldEat) {
+    shieldTile = null;
+    shieldUntil = Date.now() + 5000;
+    updateShieldState();
+    document.getElementById('msg').textContent = 'Shield! 5 seconds to pass through your tail.';
+    playBlip(660);
+  }
+  if (bonusIndex >= 0) {
+    bonusFoods.splice(bonusIndex, 1);
+    score += 1; glitch = 7;
+    startBiteJuice('#ffe259', head.x, head.y);
+    document.getElementById('score').textContent = score;
+    if (bonusFoods.length === 0) {
+      frenzy = false;
+      food = placeFood();
+      document.getElementById('msg').textContent = 'Frenzy cleared! Score ' + score + '.';
+    } else {
+      document.getElementById('msg').textContent = 'Frenzy! ' + bonusFoods.length + ' bonus squares left.';
+    }
+    hitStopMs = 60;
+  } else if (willEat) {
+    eaten++;
+    combo++;
+    themeIndex = (themeIndex + 1) % themes.length;
+    const orb = eaten % 5 === 0;
+    const biteColor = orb ? themes[themeIndex].orb : themes[themeIndex].food;
+    score += orb ? 5 : 1;
+    glitch = orb ? 14 : 7;
+    startBiteJuice(biteColor, head.x, head.y);
+    playBlip(320 + Math.min(combo, 12) * 40);
+    document.getElementById('score').textContent = score;
+    if (orb) {
+      // Frenzy mode: 3 random gold orbs appear, and the background
+      // cycles colours on every move until all 3 are eaten.
+      frenzy = true; frenzyTick = 0; bonusFoods = placeBonusFoods(); food = null;
+      document.getElementById('msg').textContent = 'Frenzy mode! Eat all 3 gold orbs.';
+    } else {
+      document.getElementById('msg').textContent = 'Nice bite. Score ' + score + '.';
+      // Shield cadence runs on normal bites only: it never changes eaten,
+      // so the 5-bite gold orb cadence is untouched.
+      shieldBites++;
+      if (score >= 20 && shieldBites >= 15 && !shieldTile && !shieldActive()) {
+        placeShield();
+        shieldBites = 0;
+        if (shieldTile) document.getElementById('msg').textContent = 'Nice bite. Score ' + score + '. A blue shield tile appeared!';
+      }
+      food = placeFood();
+    }
+    hitStopMs = 60;
+  } else {
+    snake.pop();
+  }
+  draw();
+}
+function start() {
+  dailyMode = false; seededRng = null;
+  reset(); running = true; paused = false;
+  clearInterval(explodeTimer);
+  accMs = 0; hitStopMs = 0; lastFrame = 0;
+  document.getElementById('pauseBtn').textContent = 'Pause';
+  document.getElementById('msg').textContent = 'Playing. Eat the pink squares, watch for the gold glitch orb. After score 20, a blue shield tile can appear.';
+  draw();
+}
+function startDaily() {
+  dailyMode = true; seededRng = seededRandom(todaySeed());
+  reset(); running = true; paused = false;
+  clearInterval(explodeTimer);
+  accMs = 0; hitStopMs = 0; lastFrame = 0;
+  document.getElementById('pauseBtn').textContent = 'Pause';
+  document.getElementById('msg').textContent = "Today's board. Same starting food layout all day, on this device. No server, no upload.";
+  draw();
+}
+function setDir(x, y, name) {
+  // Queue turns instead of overwriting one direction with the next.
+  // Before this fix, two fast turns in one tick collapsed into one:
+  // right, then up, then left became just left, straight back into the body.
+  // Now each turn is played in order, one per tick, up to 3 queued.
+  const last = dirQueue.length ? dirQueue[dirQueue.length - 1] : dir;
+  if (last.x === -x && last.y === -y) return;
+  if (last.x === x && last.y === y) return;
+  if (dirQueue.length < 3) dirQueue.push({x, y});
+}
+const dirs = { up: [0,-1], left: [-1,0], down: [0,1], right: [1,0] };
+document.querySelectorAll('.pad button').forEach(b => {
+  // pointerdown, not click, so a thumb tap registers at touch time, not after.
+  b.addEventListener('pointerdown', e => { e.preventDefault(); const d = dirs[b.dataset.dir]; setDir(d[0], d[1]); });
+});
+document.getElementById('startBtn').addEventListener('click', start);
+document.getElementById('dailyBtn').addEventListener('click', startDaily);
+document.getElementById('soundBtn').addEventListener('click', () => {
+  soundOn = !soundOn;
+  try { localStorage.setItem('gsj-sound', soundOn ? 'on' : 'off'); } catch (e) {}
+  document.getElementById('soundBtn').textContent = soundOn ? 'Sound: On' : 'Sound: Off';
+});
+document.getElementById('pauseBtn').addEventListener('click', () => {
+  if (!running) return;
+  paused = !paused;
+  document.getElementById('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
+  draw();
+});
+// Pause when the tab is hidden. The run is kept, not ended.
+// Tap the board or Resume to continue.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && running && !paused && !exploding) {
+    paused = true;
+    document.getElementById('pauseBtn').textContent = 'Resume';
+    draw();
+  }
+});
+cv.addEventListener('click', () => {
+  if (paused && running && !exploding) {
+    paused = false;
+    document.getElementById('pauseBtn').textContent = 'Pause';
+    draw();
+  }
+});
+document.addEventListener('keydown', e => {
+  const k = { ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0] }[e.key];
+  if (k) { e.preventDefault(); setDir(k[0], k[1]); }
+  if (e.key === ' ') { e.preventDefault(); if (!running) start(); }
+});
+// Swipe on the canvas. Pointer events cover touch, mouse and pen, so a
+// desktop drag steers exactly like a phone swipe (canvas has
+// touch-action:none, so no scroll gesture competes).
+let sx = null, sy = null;
+cv.addEventListener('pointerdown', e => { sx = e.clientX; sy = e.clientY; });
+cv.addEventListener('pointermove', e => {
+  if (sx === null) return;
+  const dx = e.clientX - sx, dy = e.clientY - sy;
+  if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
+  if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 1 : -1, 0); else setDir(0, dy > 0 ? 1 : -1);
+  sx = null; sy = null;
+});
+cv.addEventListener('pointerup', () => { sx = null; sy = null; });
+cv.addEventListener('pointercancel', () => { sx = null; sy = null; });
+renderHistory();
+reset();
+</script>
+
+<script>
+/* fun-rating: 3 stars on game over, 3rd+ game over, once per session */
+function jsbFunRate(slug, mountEl){
+  if(!mountEl || mountEl.querySelector('.jsb-funrate')) return;
+  var K = 'jsb-fun-' + slug;
+  function ls(k, v){ try{ if(arguments.length===1) return localStorage.getItem(k); localStorage.setItem(k, v); }catch(e){ return null; } }
+  function ss(k, v){ try{ if(arguments.length===1) return sessionStorage.getItem(k); sessionStorage.setItem(k, v); }catch(e){ return null; } }
+  var n = parseInt(ls(K+'-n')||'0', 10) + 1;
+  ls(K+'-n', String(n));
+  if(n < 3 || ss(K+'-s')) return;
+  ss(K+'-s', '1');
+  var box = document.createElement('div');
+  box.className = 'jsb-funrate';
+  box.innerHTML = '<div class="jsb-fr-q">fun?</div><div class="jsb-fr-stars">' +
+    '<button type="button" data-s="1" aria-label="not fun">\u2605</button>' +
+    '<button type="button" data-s="2" aria-label="ok">\u2605</button>' +
+    '<button type="button" data-s="3" aria-label="love it">\u2605</button></div>';
+  if(!document.getElementById('jsb-fr-css')){
+    var css = document.createElement('style'); css.id = 'jsb-fr-css';
+    css.textContent = '.jsb-funrate{margin:14px auto 4px;text-align:center;}' +
+      '.jsb-fr-q{font-size:12px;letter-spacing:.18em;opacity:.55;margin-bottom:6px;text-transform:uppercase;}' +
+      '.jsb-fr-stars{display:flex;gap:10px;justify-content:center;}' +
+      '.jsb-fr-stars button{background:none;border:none;font-size:34px;line-height:1;' +
+      'color:rgba(255,255,255,.22);cursor:pointer;min-width:52px;min-height:52px;padding:4px;}' +
+      '.jsb-fr-stars button:active{transform:scale(1.25);color:#2ee6a8;}' +
+      '.jsb-fr-thanks{font-size:13px;letter-spacing:.1em;opacity:.7;}';
+    document.head.appendChild(css);
+  }
+  mountEl.appendChild(box);
+  box.addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('button[data-s]') : null;
+    if(!b) return;
+    try{ if(window.goatcounter && window.goatcounter.count){
+      window.goatcounter.count({ path: '/event/fun/' + slug + '/' + b.getAttribute('data-s'), event: true });
+    }}catch(e2){}
+    box.innerHTML = '<div class="jsb-fr-thanks">thanks</div>';
+    setTimeout(function(){ if(box.parentNode) box.parentNode.removeChild(box); }, 1400);
+  });
+}
+</script>
+</body>
+</html>
