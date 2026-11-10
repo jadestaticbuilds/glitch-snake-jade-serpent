@@ -23,14 +23,14 @@ h1{margin:0;font-size:26px;letter-spacing:3px;color:#c9ffe2;text-shadow:0 0 18px
 #pilot{color:#ff7ab0;font-weight:700;letter-spacing:.5px;margin:4px 0 2px;font-size:11px;border:1px solid rgba(255,46,136,.55);background:rgba(255,46,136,.10);padding:2px 10px;border-radius:999px}
 p.sub{color:#8fb8a4;margin:2px 0 8px}
 .score{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 24px;margin:2px 0 6px;font-weight:700;background:rgba(6,32,20,.55);border:1px solid rgba(47,232,168,.25);border-radius:999px;padding:4px 18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 6px 16px rgba(0,0,0,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-canvas{display:block;width:min(92vw,440px,calc(100dvh - 478px));height:auto;aspect-ratio:1/1;margin:0 auto;background:#04150d;border:2px solid #2a9d74;border-radius:14px;box-shadow:0 0 0 4px rgba(4,21,13,.9),0 0 0 5px rgba(47,232,168,.35),0 18px 40px rgba(0,0,0,.55),0 0 28px rgba(31,191,138,.25);touch-action:none;flex-shrink:1}
-button{background:linear-gradient(180deg,#4be3ab,#23b97f);color:#032117;border:1px solid rgba(190,255,220,.5);border-radius:999px;padding:8px 16px;font-weight:700;font-size:16px;margin:6px 6px 0;cursor:pointer;box-shadow:0 4px 14px rgba(35,185,127,.35),inset 0 1px 0 rgba(255,255,255,.5)}
+canvas{display:block;width:min(92vw,440px,calc(100dvh - 424px));height:auto;aspect-ratio:1/1;margin:0 auto;background:#04150d;border:2px solid #2a9d74;border-radius:14px;box-shadow:0 0 0 4px rgba(4,21,13,.9),0 0 0 5px rgba(47,232,168,.35),0 18px 40px rgba(0,0,0,.55),0 0 28px rgba(31,191,138,.25);touch-action:none;flex-shrink:1}
+button{background:linear-gradient(180deg,#4be3ab,#23b97f);color:#032117;border:1px solid rgba(190,255,220,.5);border-radius:999px;padding:6px 13px;font-weight:700;font-size:15px;margin:4px 4px 0;cursor:pointer;box-shadow:0 4px 14px rgba(35,185,127,.35),inset 0 1px 0 rgba(255,255,255,.5)}
 button:active{transform:translateY(1px)}
 #startBtn{background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(0,0,0,.20)),url('tex-jade.webp') center/cover,#0d5c38;color:#eafff3;text-shadow:0 1px 3px rgba(0,0,0,.55);border:1px solid rgba(210,255,230,.65);box-shadow:0 6px 18px rgba(20,160,100,.45),inset 0 1px 0 rgba(255,255,255,.45)}
 button.secondary{background:linear-gradient(180deg,rgba(8,30,19,.70),rgba(3,14,9,.84)),url('tex-stone.webp') center/cover,#0a2417;color:#c9f5df;border:1px solid rgba(47,232,168,.45);box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 4px 12px rgba(0,0,0,.35);text-shadow:0 1px 2px rgba(0,0,0,.6)}
-.console{margin:8px auto 0;padding:10px 12px 12px;border-radius:20px;background:linear-gradient(180deg,rgba(8,30,19,.88),rgba(3,14,9,.93)),url('tex-stone.webp') center/cover,#0a2417;border:1px solid rgba(47,232,168,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 14px 30px rgba(0,0,0,.45);flex-shrink:0}
-.pad{display:grid;grid-template-columns:repeat(3,96px);justify-content:center;gap:12px;margin:10px auto 0;flex-shrink:0}
-.pad button{margin:0;padding:24px 0;font-size:24px;border-radius:16px;background:linear-gradient(180deg,rgba(10,38,24,.42),rgba(3,14,9,.60)),url('tex-stone.webp') center/cover,#0a2417;color:#c8ffdf;border:1px solid rgba(120,255,190,.38);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -10px 18px rgba(0,0,0,.45),0 6px 14px rgba(0,0,0,.45);text-shadow:0 0 10px rgba(47,232,168,.75),0 -1px 1px rgba(0,0,0,.85),0 1px 0 rgba(255,255,255,.18)}
+.console{margin:8px auto 0;padding:8px 10px 10px;border-radius:20px;background:linear-gradient(180deg,rgba(8,30,19,.88),rgba(3,14,9,.93)),url('tex-stone.webp') center/cover,#0a2417;border:1px solid rgba(47,232,168,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 14px 30px rgba(0,0,0,.45);flex-shrink:0}
+.pad{display:grid;grid-template-columns:repeat(3,80px);justify-content:center;gap:10px;margin:8px auto 0;flex-shrink:0}
+.pad button{margin:0;padding:16px 0;font-size:22px;border-radius:16px;background:linear-gradient(180deg,rgba(10,38,24,.42),rgba(3,14,9,.60)),url('tex-stone.webp') center/cover,#0a2417;color:#c8ffdf;border:1px solid rgba(120,255,190,.38);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -10px 18px rgba(0,0,0,.45),0 6px 14px rgba(0,0,0,.45);text-shadow:0 0 10px rgba(47,232,168,.75),0 -1px 1px rgba(0,0,0,.85),0 1px 0 rgba(255,255,255,.18)}
 .pad .empty{visibility:hidden}
 .note{color:#8fb8a4;font-size:13px;margin:4px 0 0}
 @media (max-height:750px){.foot{display:none}}
@@ -41,15 +41,15 @@ button.secondary{background:linear-gradient(180deg,rgba(8,30,19,.70),rgba(3,14,9
   main{max-width:780px}
   h1{font-size:32px}
   .score{font-size:18px;gap:8px 32px}
-  canvas{width:min(62vw,560px,calc(100dvh - 452px))}
-  .pad{grid-template-columns:repeat(3,112px);gap:14px}
-  .pad button{padding:28px 0}
-  button{font-size:17px;padding:10px 20px}
+  canvas{width:min(62vw,560px,calc(100dvh - 404px))}
+  .pad{grid-template-columns:repeat(3,96px);gap:12px}
+  .pad button{padding:20px 0}
+  button{font-size:16px;padding:8px 16px}
   .note{font-size:14px}
 }
 @media (min-width:1440px){
   main{max-width:900px}
-  canvas{width:min(54vw,640px,calc(100dvh - 452px))}
+  canvas{width:min(54vw,640px,calc(100dvh - 404px))}
 }
 a{color:#2fe8a8}
 </style>
@@ -62,7 +62,7 @@ html,body{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;us
 <body>
 <main>
 <h1>Glitch Snake</h1>
-<div id="pilot">JADE SERPENT PILOT v4 · visual rebuild test · not the live game</div>
+<div id="pilot">JADE SERPENT PILOT v5 · visual rebuild test · not the live game</div>
 <div class="score"><span>Score: <span id="score">0</span></span><span>Best: <span id="best">0</span></span><span>Today: <span id="todayBest">0</span></span><span id="shieldState"></span></div>
 <canvas id="game" width="400" height="400" aria-label="Glitch Snake game board"></canvas>
 <div class="console">
