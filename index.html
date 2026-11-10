@@ -62,7 +62,7 @@ html,body{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;us
 <body>
 <main>
 <h1>Glitch Snake</h1>
-<div id="pilot">JADE SERPENT PILOT v6 · visual rebuild test · not the live game</div>
+<div id="pilot">JADE SERPENT PILOT v7 · visual rebuild test · not the live game</div>
 <div class="score"><span>Score: <span id="score">0</span></span><span>Best: <span id="best">0</span></span><span>Today: <span id="todayBest">0</span></span><span id="shieldState"></span></div>
 <canvas id="game" width="400" height="400" aria-label="Glitch Snake game board"></canvas>
 <div class="console">
@@ -400,7 +400,7 @@ function drawSerpent(t) {
   // Photographic head, skull centred on the head cell, neck overlapping
   // the first link so the join disappears.
   var h = C[0];
-  var hw = CELL * 1.7, hh = hw * headImg.height / headImg.width;
+  var hw = CELL * 1.25, hh = hw * headImg.height / headImg.width;
   var ang = Math.atan2(dir.y, dir.x) + Math.PI / 2;
   ctx.save();
   ctx.translate(h.x, h.y); ctx.rotate(ang);
@@ -409,9 +409,9 @@ function drawSerpent(t) {
   if (tick % 90 < 12) {
     var cx = h.x, cy = h.y;
     var fx = dir.x, fy = dir.y, px = -fy, py = fx;
-    var tx = cx + fx * 24, ty = cy + fy * 24;
+    var tx = cx + fx * 19, ty = cy + fy * 19;
     ctx.strokeStyle = '#ff5f7a'; ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.moveTo(cx + fx * 17, cy + fy * 17); ctx.lineTo(tx, ty);
+    ctx.beginPath(); ctx.moveTo(cx + fx * 13, cy + fy * 13); ctx.lineTo(tx, ty);
     ctx.moveTo(tx, ty); ctx.lineTo(tx + (fx * 3 + px * 2), ty + (fy * 3 + py * 2));
     ctx.moveTo(tx, ty); ctx.lineTo(tx + (fx * 3 - px * 2), ty + (fy * 3 - py * 2));
     ctx.stroke(); ctx.lineWidth = 1;
